@@ -1,0 +1,425 @@
+---
+title: "Untitled"
+author: "Naydelin Hernandez Vargas, C03795"
+date: "2024-11-17"
+output: html_document
+---
+
+```{r}
+#Librerias 
+library(readxl)
+library(lubridate)
+library(dplyr)
+# install.packages("naniar")
+library(naniar) #ver NA 
+#install.packages("writexl")
+library(writexl)
+library(zoo)  # Para la funcion na.approx
+
+```
+
+# Tipo de cambio diario-\> mensual, con faltantes
+
+```{r}
+ruta_tc <- "C:/Users/nayde/OneDrive/Desktop/datos/tipo de cambio (diario).xlsx"
+
+tc_data <- read_excel(ruta_tc)
+tc_data <- tc_data[-c(1:4), ] 
+# Renombrar 
+colnames(tc_data) <- c("Fecha", "Tipo de cambio compra", "Tipo de cambio venta")
+
+# Limpia espacios en blanco
+tc_data$Fecha <- trimws(tc_data$Fecha)
+#fecha con lubridate 
+tc_data <- tc_data %>%
+  mutate(Fecha = dmy(Fecha)) 
+
+# tambien se ajusto las comas 
+tc_data <- tc_data %>%
+  mutate(
+    `Tipo de cambio compra` = as.numeric(gsub(",", ".", `Tipo de cambio compra`)),
+    `Tipo de cambio venta` = as.numeric(gsub(",", ".", `Tipo de cambio venta`))
+  )
+
+#sum(is.na(tc_data$`Tipo de cambio compra`))
+#sum(is.na(tc_data$`Tipo de cambio venta`))
+
+# Calcular promedio mensual para compra y venta incluyendo NA 
+tc_mensual <- tc_data %>%
+  group_by(Mes = format(Fecha, "%Y-%m")) %>%
+  summarise(
+    PromedioCompra = mean(`Tipo de cambio compra`, na.rm = TRUE),
+    PromedioVenta = mean(`Tipo de cambio venta`, na.rm = TRUE)
+  )
+
+print(tc_mensual)
+
+
+
+# Guardar el resultado como un archivo Excel
+#write_xlsx(tc_mensual, "C:/Users/nayde/OneDrive/Desktop/datos/PromedioTipoCambioMensual.xlsx")
+
+
+```
+
+# IMAE, IPC, Tasa de cambio unidos pero hay NAS en el tipo de cambio porque se uso codigo como el de arriba
+
+```{r}
+# Cargar librerías
+library(readxl)
+library(dplyr)
+library(lubridate)
+library(writexl)
+
+# Rutas, cambiar
+ruta_imae <- "C:/Users/nayde/OneDrive/Desktop/datos/IMAE (oct 2023).xlsx"
+ruta_ipc <- "C:/Users/nayde/OneDrive/Desktop/datos/IPC 98.xlsx"
+ruta_tc <- "C:/Users/nayde/OneDrive/Desktop/datos/tipo de cambio (diario).xlsx"
+
+# Cargar y limpiar IMAE
+imae <- read_excel(ruta_imae, sheet = "Hoja1")
+IMAE_limpia <- imae[-c(1:4), ]
+colnames(IMAE_limpia) <- c("Periodo_IMAE", "Nivel_IMAE", "Var_Ultimos_12_IMAE", "Var_Media_IMAE", "Aceleracion_IMAE", "Var_Interanual_IMAE")
+IMAE_limpia <- IMAE_limpia %>%
+  mutate(
+    Nivel_IMAE = as.numeric(Nivel_IMAE),
+    Var_Ultimos_12_IMAE = as.numeric(Var_Ultimos_12_IMAE),
+    Var_Media_IMAE = as.numeric(Var_Media_IMAE),
+    Aceleracion_IMAE = as.numeric(Aceleracion_IMAE),
+    Var_Interanual_IMAE = as.numeric(Var_Interanual_IMAE)
+  )
+
+# Cargar y limpiar IPC
+ipc <- read_excel(ruta_ipc, sheet = "Hoja1")
+IPC_limpia <- ipc[-c(1:4), ]
+colnames(IPC_limpia) <- c("Periodo_IPC", "Nivel_IPC", "Var_Mensual_IPC", "Var_Interanual_IPC", "Var_Acumulada_IPC")
+IPC_limpia <- IPC_limpia %>%
+  mutate(
+    Nivel_IPC = as.numeric(Nivel_IPC),
+    Var_Mensual_IPC = as.numeric(Var_Mensual_IPC),
+    Var_Interanual_IPC = as.numeric(Var_Interanual_IPC),
+    Var_Acumulada_IPC = as.numeric(Var_Acumulada_IPC)
+  )
+
+# Convertir el periodo en formato de fecha estandar
+IMAE_limpia$Periodo_IMAE <- as.Date(paste0("01-", IMAE_limpia$Periodo_IMAE), format = "%d-%B/%Y")
+IPC_limpia$Periodo_IPC <- as.Date(paste0("01-", IPC_limpia$Periodo_IPC), format = "%d-%B/%Y")
+
+# Cargar y limpiar tipo de cambio
+tc_data <- read_excel(ruta_tc)
+tc_data <- tc_data[-c(1:4), ]  
+colnames(tc_data) <- c("Fecha", "Tipo de cambio compra", "Tipo de cambio venta")
+tc_data$Fecha <- trimws(tc_data$Fecha)  
+tc_data <- tc_data %>%
+  mutate(Fecha = dmy(Fecha))  
+
+# Limpia las columnas de tipo de cambio
+tc_data <- tc_data %>%
+  mutate(
+    `Tipo de cambio compra` = as.numeric(gsub(",", ".", `Tipo de cambio compra`)),
+    `Tipo de cambio venta` = as.numeric(gsub(",", ".", `Tipo de cambio venta`))
+  )
+
+# Calcular promedio mensual para compra y venta, ignorando NA
+tc_mensual <- tc_data %>%
+  filter(!is.na(`Tipo de cambio compra`) & !is.na(`Tipo de cambio venta`)) %>%
+  group_by(Mes = format(Fecha, "%Y-%m")) %>%
+  summarise(
+    PromedioCompra = mean(`Tipo de cambio compra`, na.rm = TRUE),
+    PromedioVenta = mean(`Tipo de cambio venta`, na.rm = TRUE)
+  )
+tc_mensual$Mes <- as.Date(paste0(tc_mensual$Mes, "-01"))
+
+# Unir los dataFrames 
+datos_combinados <- full_join(IPC_limpia, IMAE_limpia, by = c("Periodo_IPC" = "Periodo_IMAE"))
+datos_combinados <- full_join(datos_combinados, tc_mensual, by = c("Periodo_IPC" = "Mes"))
+
+#ver
+head(datos_combinados)
+
+
+#write_xlsx(datos_combinados, "C:/Users/nayde/OneDrive/Desktop/datos/Datos_Combinados.xlsx")
+
+```
+
+# IMAE, IPC, IPPM, IPPS juntos, continue 
+
+```{r}
+# Ruta a los archivos
+ruta_imae <- "C:/Users/nayde/OneDrive/Desktop/datos/IMAE (oct 2023).xlsx"
+ruta_ipc <- "C:/Users/nayde/OneDrive/Desktop/datos/IPC 98.xlsx"
+ruta_ipp_man <- "C:/Users/nayde/OneDrive/Desktop/datos/IPP MAN.xlsx"
+ruta_iip_servicios <- "C:/Users/nayde/OneDrive/Desktop/datos/IIP servicios .xlsx"
+
+# Cargar y limpiar IMAE
+imae <- read_excel(ruta_imae, sheet = "Hoja1")
+IMAE_limpia <- imae[-c(1:4), ]
+colnames(IMAE_limpia) <- c("Periodo_IMAE", "Nivel_IMAE", "Var_Ultimos_12_IMAE", "Var_Media_IMAE", "Aceleracion_IMAE", "Var_Interanual_IMAE")
+IMAE_limpia <- IMAE_limpia %>%
+  mutate(
+    Nivel_IMAE = as.numeric(Nivel_IMAE),
+    Var_Ultimos_12_IMAE = as.numeric(Var_Ultimos_12_IMAE),
+    Var_Media_IMAE = as.numeric(Var_Media_IMAE),
+    Aceleracion_IMAE = as.numeric(Aceleracion_IMAE),
+    Var_Interanual_IMAE = as.numeric(Var_Interanual_IMAE)
+  )
+
+# Cargar y limpiar IPC
+ipc <- read_excel(ruta_ipc, sheet = "Hoja1")
+IPC_limpia <- ipc[-c(1:4), ]
+colnames(IPC_limpia) <- c("Periodo_IPC", "Nivel_IPC", "Var_Mensual_IPC", "Var_Interanual_IPC", "Var_Acumulada_IPC")
+IPC_limpia <- IPC_limpia %>%
+  mutate(
+    Nivel_IPC = as.numeric(Nivel_IPC),
+    Var_Mensual_IPC = as.numeric(Var_Mensual_IPC),
+    Var_Interanual_IPC = as.numeric(Var_Interanual_IPC),
+    Var_Acumulada_IPC = as.numeric(Var_Acumulada_IPC)
+  )
+
+# Convertir el periodo en formato de fecha estandar
+IPC_limpia$Periodo_IPC <- as.Date(paste0("01-", IPC_limpia$Periodo_IPC), format = "%d-%B/%Y")
+IMAE_limpia$Periodo_IMAE <- as.Date(paste0("01-", IMAE_limpia$Periodo_IMAE), format = "%d-%B/%Y")
+
+# Cargar y limpiar IPP MAN
+ipp_man <- read_excel(ruta_ipp_man, sheet = "Hoja1")
+IPP_MAN_limpia <- ipp_man[-c(1:4), ]
+colnames(IPP_MAN_limpia) <- c("Periodo_IPPM", "Nivel_IPPM", "Var_Mensual_IPPM" , "Var_Interanual_IPPM", "Var_Acumulada_IPPM")
+IPP_MAN_limpia <- IPP_MAN_limpia %>%
+  mutate(
+    Nivel_IPPM = as.numeric(Nivel_IPPM),
+    Var_Mensual_IPPM =  as.numeric(Var_Mensual_IPPM),
+    Var_Interanual_IPPM = as.numeric(Var_Interanual_IPPM),
+    Var_Acumulada_IPPM = as.numeric(Var_Acumulada_IPPM)
+  )
+IPP_MAN_limpia$Periodo_IPPM <- as.Date(paste0("01-", IPP_MAN_limpia$Periodo_IPPM), format = "%d-%B/%Y") #fechas 
+
+# Cargar y limpiar IIP servicios
+iip_servicios <- read_excel(ruta_iip_servicios, sheet = "Hoja1")
+IIP_SERVICIOS_limpia <- iip_servicios[-c(1:4), ]
+colnames(IIP_SERVICIOS_limpia) <- c("Periodo_IPPS", "Nivel_IPPS", "Var_Mensual_IPPS", "Var_Interanual_IPPS", "Var_Acumulada_IPPS")
+IIP_SERVICIOS_limpia <- IIP_SERVICIOS_limpia %>%
+  mutate(
+    Nivel_IPPS = as.numeric(Nivel_IPPS),
+    Var_Mensual_IPPS = as.numeric(Var_Mensual_IPPS),
+    Var_Interanual_IPPS = as.numeric(Var_Interanual_IPPS),
+    Var_Acumulada_IPPS = as.numeric(Var_Acumulada_IPPS)
+  )
+
+IIP_SERVICIOS_limpia$Periodo_IPPS <- as.Date(paste0("01-", IIP_SERVICIOS_limpia$Periodo_IPPS), format = "%d-%B/%Y") #fechas 
+
+# Modificar nombres columnas de fecha para que coincidan
+IPC_limpia <- IPC_limpia %>% rename(Periodo = Periodo_IPC)
+IMAE_limpia <- IMAE_limpia %>% rename(Periodo = Periodo_IMAE)
+IPP_MAN_limpia <- IPP_MAN_limpia %>% rename(Periodo = Periodo_IPPM)
+IIP_SERVICIOS_limpia <- IIP_SERVICIOS_limpia %>% rename(Periodo = Periodo_IPPS)
+
+# Filtrar  NA en las fechas
+IPC_limpia <- IPC_limpia %>% filter(!is.na(Periodo))
+IMAE_limpia <- IMAE_limpia %>% filter(!is.na(Periodo))
+IPP_MAN_limpia <- IPP_MAN_limpia %>% filter(!is.na(Periodo))
+IIP_SERVICIOS_limpia <- IIP_SERVICIOS_limpia %>% filter(!is.na(Periodo))
+#tipo de columna fecha 
+IPC_limpia$Periodo <- as.Date(IPC_limpia$Periodo)
+IMAE_limpia$Periodo <- as.Date(IMAE_limpia$Periodo)
+IPP_MAN_limpia$Periodo <- as.Date(IPP_MAN_limpia$Periodo)
+IIP_SERVICIOS_limpia$Periodo <- as.Date(IIP_SERVICIOS_limpia$Periodo)
+
+#Unirlos
+datos_combinados <- full_join(IPC_limpia, IMAE_limpia, by = "Periodo")
+datos_combinados <- full_join(datos_combinados, IPP_MAN_limpia, by = "Periodo")
+datos_combinados <- full_join(datos_combinados, IIP_SERVICIOS_limpia, by = "Periodo")
+
+# Verificar los resultados
+head(datos_combinados)
+
+#cuando esto este listo usamos  #write_xlsx(datos_combinados, "C:/Users/nayde/OneDrive/Desktop/datos/Datos_Combinados.xlsx") para descargar el dataframe nuevo 
+
+
+```
+
+# Tipo de cambio mensual completo
+
+```{r}
+
+ruta_tc <- "C:/Users/nayde/OneDrive/Desktop/datos/tipo de cambio (diario).xlsx"
+tc_data <- read_excel(ruta_tc)
+tc_data <- tc_data[-c(1:4), ]
+colnames(tc_data) <- c("Fecha", "Tipo de cambio compra", "Tipo de cambio venta")
+# Limpia espacios en blanco
+tc_data$Fecha <- trimws(tc_data$Fecha)
+#fecha con lubridate 
+tc_data <- tc_data %>%
+  mutate(Fecha = dmy(Fecha)) 
+
+# tambien se ajusto las comas 
+tc_data <- tc_data %>%
+  mutate(
+    `Tipo de cambio compra` = as.numeric(gsub(",", ".", `Tipo de cambio compra`)),
+    `Tipo de cambio venta` = as.numeric(gsub(",", ".", `Tipo de cambio venta`))
+  )
+
+
+# Calcular el promedio mensual para compra y venta ignorando valores NA
+tc_mensual <- tc_data %>%
+  filter(!is.na(`Tipo de cambio compra`) & !is.na(`Tipo de cambio venta`)) %>%
+  group_by(Mes = format(Fecha, "%Y-%m")) %>%  
+  summarise(
+    PromedioCompra = mean(`Tipo de cambio compra`, na.rm = TRUE),
+    PromedioVenta = mean(`Tipo de cambio venta`, na.rm = TRUE)
+  )
+
+#secuencia de meses completa desde el primer hasta el último mes de los datos
+rango_meses <- seq(from = as.Date("1998-01-01"),
+                   to = as.Date("2024-10-17"),
+                   by = "month")
+rango_meses <- format(rango_meses, "%Y-%m")
+
+#data frame con todos los meses 
+todos_los_meses <- data.frame(Mes = rango_meses)
+
+# Unir los meses completos con los datos de promedio mensual
+tc_completo <- todos_los_meses %>%
+  left_join(tc_mensual, by = "Mes")
+
+# Rellenar valores faltantes  con el promedio movil simple
+tc_completo <- tc_completo %>%
+  mutate(
+    PromedioCompra = zoo::na.approx(PromedioCompra, na.rm = FALSE, maxgap = Inf, rule = 2),
+    PromedioVenta = zoo::na.approx(PromedioVenta, na.rm = FALSE, maxgap = Inf, rule = 2)
+  )
+print(tc_completo)
+
+# Guardar el resultado como un archivo Excel
+write_xlsx(tc_completo, "C:/Users/nayde/OneDrive/Desktop/datos/PromedioTipoCambioMensual.xlsx")
+
+
+```
+
+# Tasas federal efectiva USA diaria -\> mensual 
+
+```{r}
+library(readxl)
+library(dplyr)
+library(lubridate)
+library(zoo)
+
+#ruta fed rate diario
+ruta_fed_rate <-  "C:/Users/nayde/OneDrive/Desktop/datos/Federal Funds Effective Rate.xls"
+
+fed_rate <- read_excel(ruta_fed_rate, skip = 10) 
+colnames(fed_rate) <- c("Fecha", "Tasa_Fed")
+
+fed_rate <- fed_rate %>%
+  filter(!is.na(Fecha) & !is.na(Tasa_Fed)) %>% 
+  mutate(
+    Fecha = as.Date(Fecha, format = "%Y-%m-%d"), 
+    Tasa_Fed = as.numeric(Tasa_Fed) 
+  )
+
+fed_rate_mensual <- fed_rate %>%
+  group_by(Mes = format(Fecha, "%Y-%m")) %>%  
+  summarise(
+    Promedio_Tasa_Fed = mean(Tasa_Fed, na.rm = TRUE) 
+  )
+
+#Proceso similar al del tipo de cambio
+rango_meses <- seq(from = as.Date("1998-01-01"), 
+                   to = as.Date("2024-10-17"), 
+                   by = "month")
+rango_meses <- format(rango_meses, "%Y-%m")
+todos_los_meses <- data.frame(Mes = rango_meses)
+fed_rate_completo <- todos_los_meses %>%
+  left_join(fed_rate_mensual, by = "Mes")
+#igual que en tasa de cambio
+fed_rate_completo <- fed_rate_completo %>%
+  mutate(
+    Promedio_Tasa_Fed = zoo::na.approx(Promedio_Tasa_Fed, na.rm = FALSE, maxgap = Inf, rule = 2)
+  )
+
+print(fed_rate_completo)
+
+#exportado 
+#write_xlsx(fed_rate_completo, "C:/Users/nayde/OneDrive/Desktop/datos/FedRateMensualCompleto.xlsx")
+
+
+
+```
+
+# Tipo de cambio, tasa interes USA,IMAE,IPC,IPPM,IPPS,
+
+```{r}
+#Rutas, cambie 
+ruta_imae <- "C:/Users/nayde/OneDrive/Desktop/datos/IMAE (oct 2023).xlsx"
+ruta_ipc <- "C:/Users/nayde/OneDrive/Desktop/datos/IPC 98.xlsx"
+ruta_ipp_man <- "C:/Users/nayde/OneDrive/Desktop/datos/IPP MAN.xlsx"
+ruta_iip_servicios <- "C:/Users/nayde/OneDrive/Desktop/datos/IIP servicios .xlsx"
+ruta_tipo_cambio <- "C:/Users/nayde/OneDrive/Desktop/datos/PromedioTipoCambioMensual.xlsx" #ya pasado a mensual
+ruta_fed_rate <- "C:/Users/nayde/OneDrive/Desktop/datos/FedRateMensualCompleto.xlsx"
+
+#Limpio los datos que siguen la misma estructura de los excel IMAE, IPC,IPP
+limpiar_datos <- function(datos, nombres_columnas, columna_fecha) {
+  datos_limpios <- datos[-c(1:4), ]
+  colnames(datos_limpios) <- nombres_columnas
+  datos_limpios <- datos_limpios %>%
+    mutate(across(-all_of(columna_fecha), as.numeric)) %>%
+    mutate(across(all_of(columna_fecha), ~ as.Date(paste0("01-", .), format = "%d-%B/%Y"))) %>%
+    filter(!is.na(!!sym(columna_fecha))) %>%
+    rename(Periodo = all_of(columna_fecha))
+  return(datos_limpios)
+}
+
+# Cargar y limpiar IMAE
+imae <- read_excel(ruta_imae, sheet = "Hoja1")
+IMAE_limpia <- limpiar_datos(imae, 
+                             c("Periodo_IMAE", "Nivel_IMAE", "Var_Ultimos_12_IMAE", 
+                               "Var_Media_IMAE", "Aceleracion_IMAE", "Var_Interanual_IMAE"), 
+                             "Periodo_IMAE")
+
+# Cargar y limpiar IPC
+ipc <- read_excel(ruta_ipc, sheet = "Hoja1")
+IPC_limpia <- limpiar_datos(ipc, 
+                            c("Periodo_IPC", "Nivel_IPC", "Var_Mensual_IPC", 
+                              "Var_Interanual_IPC", "Var_Acumulada_IPC"), 
+                            "Periodo_IPC")
+
+# Cargar y limpiar IPP MAN
+ipp_man <- read_excel(ruta_ipp_man, sheet = "Hoja1")
+IPP_MAN_limpia <- limpiar_datos(ipp_man, 
+                                c("Periodo_IPPM", "Nivel_IPPM", "Var_Mensual_IPPM", 
+                                  "Var_Interanual_IPPM", "Var_Acumulada_IPPM"), 
+                                "Periodo_IPPM")
+
+# Cargar y limpiar IIP servicios
+iip_servicios <- read_excel(ruta_iip_servicios, sheet = "Hoja1")
+IIP_SERVICIOS_limpia <- limpiar_datos(iip_servicios, 
+                                      c("Periodo_IPPS", "Nivel_IPPS", "Var_Mensual_IPPS", 
+                                        "Var_Interanual_IPPS", "Var_Acumulada_IPPS"), 
+                                      "Periodo_IPPS")
+
+# Cargar y limpiar el archivo de tipo de cambio, ya mensual
+tipo_cambio <- read_excel(ruta_tipo_cambio)
+colnames(tipo_cambio)[1] <- "Periodo" 
+tipo_cambio$Periodo <- as.Date(paste0(tipo_cambio$Periodo, "-01"), format = "%Y-%m-%d") 
+
+# Cargar y limpiar el archivo federal rate, ya mensual
+fed_rate <- read_excel(ruta_fed_rate)
+colnames(fed_rate)[1] <- "Periodo" 
+fed_rate$Periodo <- as.Date(paste0(tipo_cambio$Periodo, "-01"), format = "%Y-%m-%d")
+
+# Unir todo 
+datos_combinados <- full_join(IPC_limpia, IMAE_limpia, by = "Periodo")
+datos_combinados <- full_join(datos_combinados, IPP_MAN_limpia, by = "Periodo")
+datos_combinados <- full_join(datos_combinados, IIP_SERVICIOS_limpia, by = "Periodo")
+datos_combinados <- full_join(tipo_cambio, datos_combinados, by = "Periodo")
+datos_finales <- full_join(fed_rate, datos_combinados, by = "Periodo")
+
+#reorganizar, para que el tipo de cambio aparezca siempre en la primera columna 
+datos_finales <- datos_finales %>%
+  select(Periodo, contains("PromedioCompra"), contains("PromedioVenta"), everything())
+
+print(head(datos_finales))
+
+# Exportar el resultado final, cuando este listo 
+#write_xlsx(datos_finales, "C:/Users/nayde/OneDrive/Desktop/datos/Datos_Combinados_Finales.xlsx")
+
+```
