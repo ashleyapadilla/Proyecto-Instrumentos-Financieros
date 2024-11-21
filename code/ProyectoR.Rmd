@@ -616,3 +616,143 @@ datos_finales <- datos_finales %>%
   left_join(tbp_mensual, by = "Periodo") 
 ```
 
+#PIB
+
+USA
+```{r}
+
+pib_data <- read_excel("../data/PIB_USa.xls")
+```
+
+```{r}
+#pasar a fecha
+
+pib_data <- pib_data %>%
+  mutate(observation_date = as.Date(observation_date)) %>%
+  filter(year(observation_date) >= 1998) 
+```
+
+
+```{r}
+fechas_mensuales <- seq(
+  from = min(pib_data$observation_date),
+  to = max(pib_data$observation_date),
+  by = "month"
+)
+
+#interpolación lineal para convertir trimestral a mensual
+pib_mensual <- tibble(
+  Fecha = fechas_mensuales,
+  PIB = approx(
+    x = pib_data$observation_date,  
+    y = as.numeric(gsub(",", "", pib_data$GDP)), 
+    xout = fechas_mensuales           
+  )$y
+)
+
+```
+
+
+```{r}
+pib_US <- pib_mensual
+```
+
+
+
+```{r}
+pib_US <- pib_US %>%
+  rename(Periodo = Fecha )
+```
+
+```{r}
+pib_US <- pib_US %>%
+  rename(PIB_US = PIB)
+```
+
+Unir:
+```{r}
+datos_finales <- datos_finales %>%
+  left_join(pib_US, by = "Periodo") 
+```
+
+
+PIB CR
+
+
+```{r}
+pib_cr <- read_excel("../data/pibcr.xlsx")
+```
+
+```{r}
+pib_cr <- pib_cr %>%
+  mutate(
+    Fecha_Trimestre = case_when(
+      grepl("-I$", `...1`) ~ paste0(substr(`...1`, 1, 4), "-01-01"), # Trimestre I
+      grepl("-II$", `...1`) ~ paste0(substr(`...1`, 1, 4), "-04-01"), # Trimestre II
+      grepl("-III$", `...1`) ~ paste0(substr(`...1`, 1, 4), "-07-01"), # Trimestre III
+      grepl("-IV$", `...1`) ~ paste0(substr(`...1`, 1, 4), "-10-01")  # Trimestre IV
+    ),
+    Fecha_Trimestre = as.Date(Fecha_Trimestre) 
+  )
+```
+
+```{r}
+#Interpolar
+fechas_mensuales <- seq(
+  from = min(pib_cr$Fecha_Trimestre),
+  to = max(pib_cr$Fecha_Trimestre),
+  by = "month"
+)
+
+pib_cr_mensual <- tibble(
+  Fecha = fechas_mensuales, 
+  PIB = approx(
+    x = pib_cr$Fecha_Trimestre,                        
+    y = pib_cr$`PIB trimestral en constantes`,          
+    xout = fechas_mensuales                           
+  )$y,
+  Variacion_Interanual = approx(
+    x = pib_cr$Fecha_Trimestre,                        
+    y = pib_cr$`PIB trimestral en constantes-variación interanual`,
+    xout = fechas_mensuales                         
+  )$y
+)
+```
+
+
+```{r}
+pib_cr_mensual <- pib_cr_mensual %>%
+  mutate(
+    Var_Mensual = (PIB - lag(PIB)) / lag(PIB) * 100
+  )
+
+```
+
+```{r}
+pib_CR <- pib_cr_mensual
+```
+
+
+```{r}
+pib_CR <- pib_CR %>%
+  rename(Periodo = Fecha, Var_PIBCR = Var_Mensual)
+```
+
+
+Unir
+
+```{r}
+
+datos_finales <- datos_finales %>%
+  left_join(pib_CR, by = "Periodo") 
+
+```
+
+Var mensual US
+```{r}
+datos_finales <- datos_finales %>%
+  mutate(
+    Var_PIBUS = (PIB_US - lag(PIB_US)) / lag(PIB_US) * 100
+  )
+```
+
