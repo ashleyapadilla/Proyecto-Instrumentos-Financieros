@@ -562,25 +562,7 @@ colnames(tbp_diaria)[1] <- "Dia_Mes"
 
 ```
 
-```{r}
 
-tbp_largo <- tbp_diaria %>%
-  pivot_longer(
-    cols = -Dia_Mes, 
-    names_to = "Año", 
-    values_to = "TBP" 
-  )
-
-tbp_largo <- tbp_largo %>%
-  mutate(
-    Dia = as.numeric(sub(" .*", "", Dia_Mes)),      
-    Mes = match(sub(".* ", "", Dia_Mes), month.abb),  
-    Fecha = as.Date(paste(Año, Mes, Dia, sep = "-"))  
-  ) %>%
-  select(Fecha, TBP) 
-
-
-```
 
 ```{r}
 
