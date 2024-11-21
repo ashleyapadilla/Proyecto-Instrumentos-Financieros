@@ -756,3 +756,192 @@ datos_finales <- datos_finales %>%
   )
 ```
 
+
+```{r}
+write.csv(datos_finales, "Data_FINAL.csv", row.names = FALSE)
+
+getwd()
+
+```
+#EDA
+
+```{r}
+datos_finales$Periodo <- as.Date(datos_finales$Periodo, format = "%d/%m/%Y")
+
+```
+
+```{r}
+summary(datos_finales)
+
+
+```
+
+```{r}
+#install.packages(c("dplyr", "ggplot2", "tidyr", "corrplot", "DataExplorer", "skimr"))
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(corrplot)
+library(DataExplorer)
+library(skimr)
+```
+```{r}
+skim(datos_finales)
+```
+
+```{r}
+numericas <- datos_finales %>%
+  select_if(is.numeric)
+```
+
+```{r}
+correlaciones <- cor(numericas, use = "complete.obs")
+```
+
+
+```{r}
+
+subconjunto <- correlaciones[c("PIB", "Nivel_IPC", "PIB_US", "Var_Mensual_IPC"), 
+                              c("PIB", "Nivel_IPC", "PIB_US", "Var_Mensual_IPC")]
+
+
+corrplot(subconjunto, 
+         method = "color", 
+         type = "upper", 
+         tl.col = "black", 
+         tl.cex = 0.8, 
+         addCoef.col = "black", 
+         number.cex = 0.7)
+
+```
+
+
+```{r}
+ggplot(datos_finales, aes(x = Periodo)) +
+  geom_line(aes(y = Nivel_IPC, color = "Nivel IPC")) +
+  geom_line(aes(y = PIB, color = "PIB")) +
+  labs(title = "Tendencias temporales: Nivel IPC y PIB",
+       x = "Periodo",
+       y = "Valor") +
+  theme_minimal() +
+  scale_color_manual(name = "Variable", values = c("Nivel IPC" = "blue", "PIB" = "green"))
+```
+
+
+```{r}
+ggplot(datos_finales, aes(x = Nivel_IPC)) +
+  geom_histogram(bins = 30, fill = "pink", color = "white", alpha = 0.7) +
+  labs(title = "Distribución del Nivel IPC",
+       x = "Nivel IPC",
+       y = "Frecuencia") +
+  theme_minimal()
+```
+
+```{r}
+ggplot(datos_finales, aes(x = Periodo, y = Var_Mensual_IPC)) +
+  geom_line(color = "purple") +
+  labs(title = "Evolución de la Variación Mensual del IPC",
+       x = "Periodo",
+       y = "Variación Mensual (%)") +
+  theme_minimal()
+```
+
+
+
+
+
+```{r}
+#correlaciones
+correlacion_tipo_cambio <- correlaciones["Nivel_IPC", ]
+correlacion_tipo_cambio <- sort(correlacion_tipo_cambio, decreasing = TRUE)
+
+
+print(head(correlacion_tipo_cambio)) #bariabes mas correlacionadas
+```
+
+```{r}
+datos_finales <- datos_finales %>%
+  mutate(
+    PIB_IPC_Ratio = PIB / Nivel_IPC,  # Relación entre PIB e IPC
+    Variacion_Acumulada_IPC = cumsum(Var_Mensual_IPC)  # Variación acumulada del IPC
+  )
+
+```
+
+```{r}
+# Calcular tasas promedio de crecimiento anual del PIB e IPC
+tasas_crecimiento <- datos_finales %>%
+  group_by(Año = year(Periodo)) %>%
+  summarize(
+    Crecimiento_PIB = (last(PIB) - first(PIB)) / first(PIB) * 100,
+    Crecimiento_IPC = (last(Nivel_IPC) - first(Nivel_IPC)) / first(Nivel_IPC) * 100
+  )
+ggplot(tasas_crecimiento, aes(x = Año)) +
+  geom_bar(aes(y = Crecimiento_PIB, fill = "Crecimiento PIB"), stat = "identity", position = "dodge") +
+  geom_bar(aes(y = Crecimiento_IPC, fill = "Crecimiento IPC"), stat = "identity", position = "dodge") +
+  labs(title = "Tasas de Crecimiento Anual del PIB e IPC",
+       x = "Año", y = "Tasa de Crecimiento (%)", fill = "Indicador") +
+  theme_minimal()
+```
+
+```{r}
+ipc_estacionalidad <- datos_finales %>%
+  mutate(Mes = month(Periodo, label = TRUE)) %>%
+  group_by(Mes) %>%
+  summarize(IPC_Medio = mean(Nivel_IPC, na.rm = TRUE))
+
+ggplot(ipc_estacionalidad, aes(x = Mes, y = IPC_Medio)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Estacionalidad Mensual del IPC", x = "Mes", y = "Nivel IPC Promedio") +
+  theme_minimal()
+```
+
+```{r}
+# Calcular volatilidad por año
+volatilidad <- datos_finales %>%
+  group_by(Año = year(Periodo)) %>%
+  summarize(
+    Volatilidad_PIB = sd(PIB, na.rm = TRUE),
+    Volatilidad_IPC = sd(Nivel_IPC, na.rm = TRUE)
+  )
+
+
+ggplot(volatilidad, aes(x = Año)) +
+  geom_line(aes(y = Volatilidad_PIB, color = "Volatilidad PIB"), size = 1) +
+  geom_line(aes(y = Volatilidad_IPC, color = "Volatilidad IPC"), size = 1) +
+  labs(title = "Volatilidad Anual del PIB e IPC",
+       x = "Año", y = "Volatilidad", color = "Indicador") +
+  theme_minimal()
+```
+```{r}
+# Crear retardos para analizar correlaciones temporales
+datos_finales <- datos_finales %>%
+  mutate(
+    Lag_IPC = lag(Nivel_IPC, 1),  # Retardo de un mes para el IPC
+    Lag_PIB = lag(PIB, 1)         # Retardo de un mes para el PIB
+  )
+
+correlacion_retardos <- datos_finales %>%
+  select(Nivel_IPC, Lag_IPC, PIB, Lag_PIB) %>%
+  cor(use = "complete.obs")
+
+library(reshape2)
+correlacion_larga <- melt(correlacion_retardos)
+
+
+# Crear un mapa de calor
+ggplot(correlacion_larga, aes(Var1, Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "lightblue", high = "pink", mid = "white", midpoint = 0, 
+                       limit = c(-1, 1), space = "Lab", name = "Correlación") +
+  labs(title = "Mapa de Calor de Correlaciones con Retardos",
+       x = "", y = "") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+print(correlacion_retardos)
+```
+
