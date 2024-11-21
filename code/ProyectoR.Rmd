@@ -1,6 +1,6 @@
 ---
 title: "Untitled"
-author: "Naydelin Hernandez Vargas, C03795"
+author: 
 date: "2024-11-17"
 output: html_document
 ---
@@ -9,6 +9,7 @@ output: html_document
 #Librerias 
 library(readxl)
 library(lubridate)
+library(tidyverse)
 library(dplyr)
 # install.packages("naniar")
 library(naniar) #ver NA 
@@ -21,9 +22,9 @@ library(zoo)  # Para la funcion na.approx
 # Tipo de cambio diario-\> mensual, con faltantes
 
 ```{r}
-ruta_tc <- "C:/Users/nayde/OneDrive/Desktop/datos/tipo de cambio (diario).xlsx"
+ruta_tc <- "../data/tipo de cambio (diario).xlsx"
 
-tc_data <- read_excel(ruta_tc)
+tc_data <- read_excel("../data/tipo de cambio (diario).xlsx")
 tc_data <- tc_data[-c(1:4), ] 
 # Renombrar 
 colnames(tc_data) <- c("Fecha", "Tipo de cambio compra", "Tipo de cambio venta")
@@ -72,9 +73,9 @@ library(lubridate)
 library(writexl)
 
 # Rutas, cambiar
-ruta_imae <- "C:/Users/nayde/OneDrive/Desktop/datos/IMAE (oct 2023).xlsx"
-ruta_ipc <- "C:/Users/nayde/OneDrive/Desktop/datos/IPC 98.xlsx"
-ruta_tc <- "C:/Users/nayde/OneDrive/Desktop/datos/tipo de cambio (diario).xlsx"
+ruta_imae <- "../data/IMAE (oct 2023).xlsx"
+ruta_ipc <- "../data/IPC 98.xlsx"
+ruta_tc <- "../data/tipo de cambio (diario).xlsx"
 
 # Cargar y limpiar IMAE
 imae <- read_excel(ruta_imae, sheet = "Hoja1")
@@ -146,10 +147,10 @@ head(datos_combinados)
 
 ```{r}
 # Ruta a los archivos
-ruta_imae <- "C:/Users/nayde/OneDrive/Desktop/datos/IMAE (oct 2023).xlsx"
-ruta_ipc <- "C:/Users/nayde/OneDrive/Desktop/datos/IPC 98.xlsx"
-ruta_ipp_man <- "C:/Users/nayde/OneDrive/Desktop/datos/IPP MAN.xlsx"
-ruta_iip_servicios <- "C:/Users/nayde/OneDrive/Desktop/datos/IIP servicios .xlsx"
+ruta_imae <- "../data/IMAE (oct 2023).xlsx"
+ruta_ipc <- "../data/IPC 98.xlsx"
+ruta_ipp_man <- "../data/IPP MAN.xlsx"
+ruta_iip_servicios <- "../data/IIP servicios .xlsx"
 
 # Cargar y limpiar IMAE
 imae <- read_excel(ruta_imae, sheet = "Hoja1")
@@ -237,12 +238,12 @@ head(datos_combinados)
 
 ```
 
-# Tipo de cambio mensual completo
+na# Tipo de cambio mensual completo
 
 ```{r}
 
-ruta_tc <- "C:/Users/nayde/OneDrive/Desktop/datos/tipo de cambio (diario).xlsx"
-tc_data <- read_excel(ruta_tc)
+ruta_tc <- "data/tipo de cambio (diario).xlsx"
+tc_data <- read_excel("../data/tipo de cambio (diario).xlsx")
 tc_data <- tc_data[-c(1:4), ]
 colnames(tc_data) <- c("Fecha", "Tipo de cambio compra", "Tipo de cambio venta")
 # Limpia espacios en blanco
@@ -290,7 +291,7 @@ tc_completo <- tc_completo %>%
 print(tc_completo)
 
 # Guardar el resultado como un archivo Excel
-write_xlsx(tc_completo, "C:/Users/nayde/OneDrive/Desktop/datos/PromedioTipoCambioMensual.xlsx")
+write_xlsx(tc_completo, "../data/PromedioTipoCambioMensual.xlsx")
 
 
 ```
@@ -304,9 +305,9 @@ library(lubridate)
 library(zoo)
 
 #ruta fed rate diario
-ruta_fed_rate <-  "C:/Users/nayde/OneDrive/Desktop/datos/Federal Funds Effective Rate.xls"
+ruta_fed_rate <-  "../data/Federal Funds Effective Rate.xls"
 
-fed_rate <- read_excel(ruta_fed_rate, skip = 10) 
+fed_rate <- read_excel("../data/Federal Funds Effective Rate.xls", skip = 10) 
 colnames(fed_rate) <- c("Fecha", "Tasa_Fed")
 
 fed_rate <- fed_rate %>%
@@ -349,12 +350,12 @@ print(fed_rate_completo)
 
 ```{r}
 #Rutas, cambie 
-ruta_imae <- "C:/Users/nayde/OneDrive/Desktop/datos/IMAE (oct 2023).xlsx"
-ruta_ipc <- "C:/Users/nayde/OneDrive/Desktop/datos/IPC 98.xlsx"
-ruta_ipp_man <- "C:/Users/nayde/OneDrive/Desktop/datos/IPP MAN.xlsx"
-ruta_iip_servicios <- "C:/Users/nayde/OneDrive/Desktop/datos/IIP servicios .xlsx"
-ruta_tipo_cambio <- "C:/Users/nayde/OneDrive/Desktop/datos/PromedioTipoCambioMensual.xlsx" #ya pasado a mensual
-ruta_fed_rate <- "C:/Users/nayde/OneDrive/Desktop/datos/FedRateMensualCompleto.xlsx"
+ruta_imae <- "../data/IMAE (oct 2023).xlsx"
+ruta_ipc <- "../data/IPC 98.xlsx"
+ruta_ipp_man <- "../data/IPP MAN.xlsx"
+ruta_iip_servicios <- "../data/IIP servicios .xlsx"
+ruta_tipo_cambio <- "../data/PromedioTipoCambioMensual.xlsx" #ya pasado a mensual
+ruta_fed_rate <- "../data/FedRateMensualCompleto.xlsx"
 
 #Limpio los datos que siguen la misma estructura de los excel IMAE, IPC,IPP
 limpiar_datos <- function(datos, nombres_columnas, columna_fecha) {
@@ -423,3 +424,131 @@ print(head(datos_finales))
 #write_xlsx(datos_finales, "C:/Users/nayde/OneDrive/Desktop/datos/Datos_Combinados_Finales.xlsx")
 
 ```
+
+
+IPC USA
+
+```{r}
+
+data_original <- read_excel("../data/IPC USA.xlsx") 
+
+
+IPC_USA <- data_original %>%
+  filter(Year >= 1998) %>% # Filtrar desde 1998
+  pivot_longer(cols = Jan:Dec, names_to = "Mes", values_to = "IPC") %>% # Convertir a formato largo
+  mutate(Mes = match(Mes, month.abb), # Convertir nombres de meses a números
+         Fecha = as.Date(paste(Year, Mes, "01", sep = "-")), 
+         IPC = as.numeric(IPC)) %>% # 
+  arrange(Fecha) %>% # Ordenar por fecha
+  select(Fecha, IPC, Avg, `Dec-Dec`, `Avg-Avg`)
+
+
+head(IPC_USA)
+```
+
+
+
+
+```{r}
+colnames(IPC_USA)
+```
+Agregar Var mensual a IPC USA
+```{r}
+IPC_USA <- IPC_USA %>%
+  mutate(
+    Variacion_Mensual = (IPC - lag(IPC)) / lag(IPC) * 100 
+  )
+
+head(IPC_USA)
+
+```
+
+Cambiar nombre IPC US
+
+```{r}
+IPC_USA <- IPC_USA %>%
+  rename(
+    IPC_US = IPC,                
+    Prom_Anual_US = Avg,             
+    Cambio_Anual_US = `Dec-Dec`,        
+    Promedio_Cambio = `Avg-Avg`,      
+    Var_Mensual_US = Variacion_Mensual,
+    Periodo = Fecha
+  )
+```
+
+#Unir IPC al resto
+
+```{r}
+# Unir las tablas
+datos_finales <- datos_finales %>%
+  left_join(IPC_USA, by = "Periodo") 
+
+head(datos_finales)
+```
+
+Eliminar col repetidas
+```{r}
+datos_finales <- datos_finales %>%
+  select(-ends_with(".x"))
+
+datos_finales <- datos_finales %>%
+  rename_with(~ gsub("\\.y$", "", .), ends_with(".y")) 
+
+```
+
+Col que no se usan 
+```{r}
+
+datos_finales <- datos_finales%>%
+  select(-Prom_Anual_US, -Promedio_Cambio)
+
+```
+
+# para los NAN
+```{r}
+promedio_movil <- rollmean(datos_finales$IPC_US, k = 3, fill = NA, align = "center")
+promedio_movil <- na.fill(promedio_movil, "extend") 
+
+
+datos_finales$IPC_US <- ifelse(
+  is.na(datos_finales$IPC_US), 
+  promedio_movil,                        
+  datos_finales$IPC_US    
+)
+
+
+```
+
+
+```{r}
+datos_finales$Cambio_Anual_US <- as.numeric(datos_finales$Cambio_Anual_US)
+
+
+promedio_cambio <- mean(datos_finales$Cambio_Anual_US, na.rm = TRUE)
+
+datos_finales$Cambio_Anual_US <- ifelse(
+  is.na(datos_finales$Cambio_Anual_US), 
+  promedio_cambio, 
+  datos_finales$Cambio_Anual_US
+)
+
+```
+
+```{r}
+datos_finales <- datos_finales %>%
+  mutate(
+    Var_Mensual_US = ifelse(
+      is.na(Var_Mensual_US),                          
+      (IPC_US - lag(IPC_US)) / lag(IPC_US) * 100,  
+      Var_Mensual_US                                
+    )
+  )
+
+```
+
+
+```{r}
+datos_finales$Var_Mensual_US[1] <- 0.185989
+```
+
