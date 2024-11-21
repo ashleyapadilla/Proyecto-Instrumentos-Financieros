@@ -505,7 +505,7 @@ datos_finales <- datos_finales%>%
 
 ```
 
-# para los NAN
+ para los NAN
 ```{r}
 promedio_movil <- rollmean(datos_finales$IPC_US, k = 3, fill = NA, align = "center")
 promedio_movil <- na.fill(promedio_movil, "extend") 
@@ -550,5 +550,69 @@ datos_finales <- datos_finales %>%
 
 ```{r}
 datos_finales$Var_Mensual_US[1] <- 0.185989
+```
+
+#TBP
+```{r}
+tbp_diaria <- read_excel("../data/TBP CR (diario, en 1998).xlsx")
+```
+```{r}
+
+colnames(tbp_diaria)[1] <- "Dia_Mes"
+
+```
+
+```{r}
+
+tbp_largo <- tbp_diaria %>%
+  pivot_longer(
+    cols = -Dia_Mes, 
+    names_to = "Año", 
+    values_to = "TBP" 
+  )
+
+tbp_largo <- tbp_largo %>%
+  mutate(
+    Dia = as.numeric(sub(" .*", "", Dia_Mes)),      
+    Mes = match(sub(".* ", "", Dia_Mes), month.abb),  
+    Fecha = as.Date(paste(Año, Mes, Dia, sep = "-"))  
+  ) %>%
+  select(Fecha, TBP) 
+
+
+```
+
+```{r}
+
+meses_es <- c("Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Set", "Oct", "Nov", "Dic")
+
+tbp_largo <- tbp_largo %>%
+  mutate(
+    Dia = as.numeric(sub(" .*", "", Dia_Mes)),              
+    Mes = match(sub(".* ", "", Dia_Mes), meses_es),         
+    Fecha = as.Date(paste(Año, sprintf("%02d", Mes), sprintf("%02d", Dia), sep = "-")) 
+  )
+
+
+```
+```{r}
+
+
+tbp_mensual <- tbp_largo %>%
+  mutate(Mes = floor_date(Fecha, "month")) %>% 
+  group_by(Mes) %>%                            
+  summarise(TBP = mean(TBP, na.rm = TRUE))# Calcular el promedio ensual
+
+```
+
+```{r}
+tbp_mensual <- tbp_mensual %>%
+  rename(Periodo = Mes )
+```
+
+Unir 
+```{r}
+datos_finales <- datos_finales %>%
+  left_join(tbp_mensual, by = "Periodo") 
 ```
 
