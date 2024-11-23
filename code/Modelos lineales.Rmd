@@ -5,8 +5,51 @@ date: "2024-11-23"
 ---
 
 ```{r}
-
+library(tidyverse)
+library(readxl)
+library(lubridate)
 ```
 
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+data <- read.csv('../data/DATA_FINAL.csv', sep = ';') %>% 
+  select(Periodo, 
+         PromedioVenta, 
+         Promedio_Tasa_Fed,
+         TBP,
+         Nivel_IPC, 
+         Var_Mensual_IPC,
+         Nivel_IMAE,
+         Nivel_IPPM, 
+         Var_Mensual_IPPM,
+         Nivel_IPPS, 
+         Var_Mensual_IPPS,
+         IPC_US, 
+         Var_Mensual_US) %>% 
+  mutate(Var_Mensual_IMAE = Nivel_IMAE/lag(Nivel_IMAE)-1,
+         Periodo = dmy(Periodo),
+         Q = (PromedioVenta*IPC_US)/Nivel_IPC,
+         ) %>% 
+  select(Periodo, 
+         Q,
+         Promedio_Tasa_Fed,
+         TBP,
+         Var_Mensual_IMAE, 
+         Var_Mensual_IPC,
+         Var_Mensual_IPPM,
+         Var_Mensual_IPPS,
+         Var_Mensual_US
+         ) %>% 
+  rename(inf_us = Var_Mensual_US, 
+         inf = Var_Mensual_IPC) 
+data
+```
+
+
+```{r}
+read.csv('../data/DATA_FINAL.csv', sep = ';') %>% 
+  select(Periodo, Nivel_IPC, IPC_US) %>% 
+  filter(IPC_US==100)
+```
+
+
