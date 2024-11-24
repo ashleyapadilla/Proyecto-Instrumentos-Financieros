@@ -382,7 +382,7 @@ TCR_long <- TCR %>%
   arrange(Fecha) %>%  # Ordenar por fecha
   select(Fecha, TCR)  
 
-write_xlsx(TCR_long, "C:/Users/nayde/OneDrive/Desktop/datos/TCR_LONG.xlsx")
+#write_xlsx(TCR_long, "C:/Users/nayde/OneDrive/Desktop/datos/TCR_LONG.xlsx")
 
 
 ```
@@ -616,6 +616,17 @@ colnames(tbp_diaria)[1] <- "Dia_Mes"
 
 ```
 
+
+```{r}
+tbp_largo <- tbp_diaria %>%
+  pivot_longer(
+    cols = -Dia_Mes,  
+    names_to = "Año",  
+    values_to = "TBP"  
+  )
+```
+
+
 ```{r}
 
 meses_es <- c("Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Set", "Oct", "Nov", "Dic")
@@ -628,7 +639,10 @@ tbp_largo <- tbp_largo %>%
   )
 
 
-```
+
+``` 
+
+
 
 ```{r}
 
@@ -636,13 +650,13 @@ tbp_largo <- tbp_largo %>%
 tbp_mensual <- tbp_largo %>%
   mutate(Mes = floor_date(Fecha, "month")) %>% 
   group_by(Mes) %>%                            
-  summarise(TBP = mean(TBP, na.rm = TRUE))# Calcular el promedio ensual
+  summarise(TBP = mean(TBP, na.rm = TRUE)) 
 
 ```
 
 ```{r}
 tbp_mensual <- tbp_mensual %>%
-  rename(Periodo = Mes )
+  rename(Periodo = Mes ) 
 ```
 
 Unir
