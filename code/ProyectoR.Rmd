@@ -382,7 +382,7 @@ TCR_long <- TCR %>%
   arrange(Fecha) %>%  # Ordenar por fecha
   select(Fecha, TCR)  
 
-write_xlsx(TCR_long, "C:/Users/nayde/OneDrive/Desktop/datos/TCR_LONG.xlsx")
+#write_xlsx(TCR_long, "C:/Users/nayde/OneDrive/Desktop/datos/TCR_LONG.xlsx")
 
 
 ```
@@ -616,7 +616,7 @@ colnames(tbp_diaria)[1] <- "Dia_Mes"
 
 ```
 
-<<<<<<< HEAD
+
 ```{r}
 tbp_largo <- tbp_diaria %>%
   pivot_longer(
@@ -627,8 +627,6 @@ tbp_largo <- tbp_diaria %>%
 ```
 
 
-=======
->>>>>>> 2df4003574ff3bd07630acde8407b2748d74ccd0
 ```{r}
 
 meses_es <- c("Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Set", "Oct", "Nov", "Dic")
@@ -641,11 +639,10 @@ tbp_largo <- tbp_largo %>%
   )
 
 
-<<<<<<< HEAD
+
 ``` 
-=======
-```
->>>>>>> 2df4003574ff3bd07630acde8407b2748d74ccd0
+
+
 
 ```{r}
 
