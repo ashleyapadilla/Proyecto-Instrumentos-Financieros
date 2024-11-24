@@ -143,7 +143,7 @@ head(datos_combinados)
 
 ```
 
-# IMAE, IPC, IPPM, IPPS juntos, continue 
+# IMAE, IPC, IPPM, IPPS juntos, continue
 
 ```{r}
 # Ruta a los archivos
@@ -296,7 +296,7 @@ write_xlsx(tc_completo, "../data/PromedioTipoCambioMensual.xlsx")
 
 ```
 
-# Tasas federal efectiva USA diaria -\> mensual 
+# Tasas federal efectiva USA diaria -\> mensual
 
 ```{r}
 library(readxl)
@@ -346,7 +346,51 @@ print(fed_rate_completo)
 
 ```
 
-# Tipo de cambio, tasa interes USA,IMAE,IPC,IPPM,IPPS,
+# TCR a formato long
+
+```{r}
+# Cargar los datos de Tipo de Cambio Real
+
+ruta_tipo_cambio_real <- "../data/TipoCambioReal.xlsx"
+TCR <- read_excel(ruta_tipo_cambio_real, sheet = "Hoja1")
+
+
+TCR <- TCR[-c(1:4), ]
+colnames(TCR)[1] <- "Mes"
+
+colnames(TCR)[2:ncol(TCR)] <- as.character(1998:2024)  # nombres de los años 
+
+meses_esp <- c("Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", 
+               "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre")
+
+meses_eng <- month.name  #
+mes_map <- setNames(meses_eng, meses_esp)
+
+# Mapeo de los meses
+TCR$Mes <- mes_map[TCR$Mes]
+
+# Verificar los cambios en la columna "Mes"
+unique(TCR$Mes)
+
+# años en una columna y los valores de tipo de cambio en otra
+TCR_long <- TCR %>%
+  pivot_longer(cols = `1998`:`2024`, 
+               names_to = "Year", 
+               values_to = "TCR") %>%
+  mutate(Mes = factor(Mes, levels = month.name), 
+         Fecha = as.Date(paste(Year, match(Mes, month.name), "01", sep = "-"), format = "%Y-%m-%d")) %>%  # Cambiado para usar 'match' en lugar de 'Mes' directamente
+  arrange(Fecha) %>%  # Ordenar por fecha
+  select(Fecha, TCR)  
+
+write_xlsx(TCR_long, "C:/Users/nayde/OneDrive/Desktop/datos/TCR_LONG.xlsx")
+
+
+```
+
+# Tipo de cambio Real, TC nominal, tasa interes USA,IMAE,IPC,IPPM,IPPS,
+
+```         
+```
 
 ```{r}
 #Rutas, cambie 
@@ -356,7 +400,7 @@ ruta_ipp_man <- "../data/IPP MAN.xlsx"
 ruta_iip_servicios <- "../data/IIP servicios .xlsx"
 ruta_tipo_cambio <- "../data/PromedioTipoCambioMensual.xlsx" #ya pasado a mensual
 ruta_fed_rate <- "../data/FedRateMensualCompleto.xlsx"
-
+ruta_tipo_cambio_real_long <- "../data/TCR_LONG.xlsx"
 #Limpio los datos que siguen la misma estructura de los excel IMAE, IPC,IPP
 limpiar_datos <- function(datos, nombres_columnas, columna_fecha) {
   datos_limpios <- datos[-c(1:4), ]
@@ -406,25 +450,33 @@ tipo_cambio$Periodo <- as.Date(paste0(tipo_cambio$Periodo, "-01"), format = "%Y-
 fed_rate <- read_excel(ruta_fed_rate)
 colnames(fed_rate)[1] <- "Periodo" 
 fed_rate$Periodo <- as.Date(paste0(tipo_cambio$Periodo, "-01"), format = "%Y-%m-%d")
-
+# Cargar y limpiar el archivo de tipo de cambio Real
+tipo_cambio_real<- read_excel(ruta_tipo_cambio_real_long)
+colnames(tipo_cambio_real)[1] <- "Periodo" 
+tipo_cambio_real$Periodo <- as.Date(paste0(tipo_cambio_real$Periodo, "-01"), format = "%Y-%m-%d") 
 # Unir todo 
 datos_combinados <- full_join(IPC_limpia, IMAE_limpia, by = "Periodo")
 datos_combinados <- full_join(datos_combinados, IPP_MAN_limpia, by = "Periodo")
 datos_combinados <- full_join(datos_combinados, IIP_SERVICIOS_limpia, by = "Periodo")
+datos_combinados <- full_join(tipo_cambio_real, datos_combinados, by = "Periodo")
+
 datos_combinados <- full_join(tipo_cambio, datos_combinados, by = "Periodo")
 datos_finales <- full_join(fed_rate, datos_combinados, by = "Periodo")
 
 #reorganizar, para que el tipo de cambio aparezca siempre en la primera columna 
 datos_finales <- datos_finales %>%
-  select(Periodo, contains("PromedioCompra"), contains("PromedioVenta"), everything())
+  select(Periodo, contains("TCR"), everything())
 
 print(head(datos_finales))
 
 # Exportar el resultado final, cuando este listo 
 #write_xlsx(datos_finales, "C:/Users/nayde/OneDrive/Desktop/datos/Datos_Combinados_Finales.xlsx")
 
-```
 
+# Ver las primeras filas de los datos ya transformados
+#head(TCR_long)
+
+```
 
 IPC USA
 
@@ -446,13 +498,12 @@ IPC_USA <- data_original %>%
 head(IPC_USA)
 ```
 
-
-
-
 ```{r}
 colnames(IPC_USA)
 ```
+
 Agregar Var mensual a IPC USA
+
 ```{r}
 IPC_USA <- IPC_USA %>%
   mutate(
@@ -488,6 +539,7 @@ head(datos_finales)
 ```
 
 Eliminar col repetidas
+
 ```{r}
 datos_finales <- datos_finales %>%
   select(-ends_with(".x"))
@@ -497,7 +549,8 @@ datos_finales <- datos_finales %>%
 
 ```
 
-Col que no se usan 
+Col que no se usan
+
 ```{r}
 
 datos_finales <- datos_finales%>%
@@ -505,7 +558,8 @@ datos_finales <- datos_finales%>%
 
 ```
 
- para los NAN
+para los NAN
+
 ```{r}
 promedio_movil <- rollmean(datos_finales$IPC_US, k = 3, fill = NA, align = "center")
 promedio_movil <- na.fill(promedio_movil, "extend") 
@@ -519,7 +573,6 @@ datos_finales$IPC_US <- ifelse(
 
 
 ```
-
 
 ```{r}
 datos_finales$Cambio_Anual_US <- as.numeric(datos_finales$Cambio_Anual_US)
@@ -547,21 +600,23 @@ datos_finales <- datos_finales %>%
 
 ```
 
-
 ```{r}
 datos_finales$Var_Mensual_US[1] <- 0.185989
 ```
 
 #TBP
+
 ```{r}
 tbp_diaria <- read_excel("../data/TBP CR (diario, en 1998).xlsx")
 ```
+
 ```{r}
 
 colnames(tbp_diaria)[1] <- "Dia_Mes"
 
 ```
 
+<<<<<<< HEAD
 ```{r}
 tbp_largo <- tbp_diaria %>%
   pivot_longer(
@@ -572,6 +627,8 @@ tbp_largo <- tbp_diaria %>%
 ```
 
 
+=======
+>>>>>>> 2df4003574ff3bd07630acde8407b2748d74ccd0
 ```{r}
 
 meses_es <- c("Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Set", "Oct", "Nov", "Dic")
@@ -584,7 +641,11 @@ tbp_largo <- tbp_largo %>%
   )
 
 
+<<<<<<< HEAD
 ``` 
+=======
+```
+>>>>>>> 2df4003574ff3bd07630acde8407b2748d74ccd0
 
 ```{r}
 
@@ -601,7 +662,8 @@ tbp_mensual <- tbp_mensual %>%
   rename(Periodo = Mes ) 
 ```
 
-Unir 
+Unir
+
 ```{r}
 datos_finales <- datos_finales %>%
   left_join(tbp_mensual, by = "Periodo") 
@@ -610,6 +672,7 @@ datos_finales <- datos_finales %>%
 #PIB
 
 USA
+
 ```{r}
 
 pib_data <- read_excel("../data/PIB_USa.xls")
@@ -622,7 +685,6 @@ pib_data <- pib_data %>%
   mutate(observation_date = as.Date(observation_date)) %>%
   filter(year(observation_date) >= 1998) 
 ```
-
 
 ```{r}
 fechas_mensuales <- seq(
@@ -643,12 +705,9 @@ pib_mensual <- tibble(
 
 ```
 
-
 ```{r}
 pib_US <- pib_mensual
 ```
-
-
 
 ```{r}
 pib_US <- pib_US %>%
@@ -661,14 +720,13 @@ pib_US <- pib_US %>%
 ```
 
 Unir:
+
 ```{r}
 datos_finales <- datos_finales %>%
   left_join(pib_US, by = "Periodo") 
 ```
 
-
 PIB CR
-
 
 ```{r}
 pib_cr <- read_excel("../data/pibcr.xlsx")
@@ -710,7 +768,6 @@ pib_cr_mensual <- tibble(
 )
 ```
 
-
 ```{r}
 pib_cr_mensual <- pib_cr_mensual %>%
   mutate(
@@ -723,12 +780,10 @@ pib_cr_mensual <- pib_cr_mensual %>%
 pib_CR <- pib_cr_mensual
 ```
 
-
 ```{r}
 pib_CR <- pib_CR %>%
   rename(Periodo = Fecha, Var_PIBCR = Var_Mensual)
 ```
-
 
 Unir
 
@@ -740,6 +795,7 @@ datos_finales <- datos_finales %>%
 ```
 
 Var mensual US
+
 ```{r}
 datos_finales <- datos_finales %>%
   mutate(
@@ -747,6 +803,9 @@ datos_finales <- datos_finales %>%
   )
 ```
 
+```{r}
+
+```
 
 ```{r}
 write.csv(datos_finales, "Data_FINAL.csv", row.names = FALSE)
@@ -754,6 +813,7 @@ write.csv(datos_finales, "Data_FINAL.csv", row.names = FALSE)
 getwd()
 
 ```
+
 #EDA
 
 ```{r}
@@ -776,6 +836,7 @@ library(corrplot)
 library(DataExplorer)
 library(skimr)
 ```
+
 ```{r}
 skim(datos_finales)
 ```
@@ -788,7 +849,6 @@ numericas <- datos_finales %>%
 ```{r}
 correlaciones <- cor(numericas, use = "complete.obs")
 ```
-
 
 ```{r}
 
@@ -806,7 +866,6 @@ corrplot(subconjunto,
 
 ```
 
-
 ```{r}
 ggplot(datos_finales, aes(x = Periodo)) +
   geom_line(aes(y = Nivel_IPC, color = "Nivel IPC")) +
@@ -817,7 +876,6 @@ ggplot(datos_finales, aes(x = Periodo)) +
   theme_minimal() +
   scale_color_manual(name = "Variable", values = c("Nivel IPC" = "blue", "PIB" = "green"))
 ```
-
 
 ```{r}
 ggplot(datos_finales, aes(x = Nivel_IPC)) +
@@ -836,10 +894,6 @@ ggplot(datos_finales, aes(x = Periodo, y = Var_Mensual_IPC)) +
        y = "Variación Mensual (%)") +
   theme_minimal()
 ```
-
-
-
-
 
 ```{r}
 #correlaciones
@@ -904,6 +958,7 @@ ggplot(volatilidad, aes(x = Año)) +
        x = "Año", y = "Volatilidad", color = "Indicador") +
   theme_minimal()
 ```
+
 ```{r}
 # Crear retardos para analizar correlaciones temporales
 datos_finales <- datos_finales %>%
@@ -931,8 +986,6 @@ ggplot(correlacion_larga, aes(Var1, Var2, fill = value)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-
 ```{r}
 print(correlacion_retardos)
 ```
-
