@@ -4,12 +4,51 @@ output: html_document
 date: "2024-11-23"
 ---
 
+# Preambulo
+
 ```{r}
 library(tidyverse)
 library(readxl)
 library(lubridate)
+library(extrafont)
+loadfonts(device="win")
+library(urca)
 ```
 
+```{r}
+add_rezagos <- function(df, variables, num_lags, ungroup=T){
+  
+
+  if(ungroup){
+    df <- ungroup(df)
+  }
+  lags_distintos <- ifelse((num_lags %>% unique %>% length)==1, F, T)
+  
+  #Funcion para adicionar rezagos de una variable ------------------------------
+  add_rezagos_var <- function(df, variable, num_lags){
+    for(i in 1:num_lags){
+      col_name <- str_c("L", as.character(i), variable)
+      df <- df %>% mutate(!!sym(col_name):=dplyr::lag(!!sym(variable), i))
+    }
+    return(df)
+  }
+  #-----------------------------------------------------------------------------
+  
+  #Adiciono rezagos a cada una de las variables. 
+  if(lags_distintos){
+    for(i in seq_along(variables)){
+      df <- add_rezagos_var(df, variables[i], num_lags[i])
+    }
+  }else{
+    for(i in seq_along(variables)){
+      df <- add_rezagos_var(df, variables[i], num_lags)
+    }
+  }
+  return(df)
+}
+```
+
+# Data
 
 ```{r}
 data <- read.csv('../data/DATA_FINAL.csv', sep = ';') %>% 
@@ -17,7 +56,7 @@ data <- read.csv('../data/DATA_FINAL.csv', sep = ';') %>%
          PromedioVenta, 
          Promedio_Tasa_Fed,
          TBP,
-         Nivel_IPC, 
+         Nivel_IPC,
          Var_Mensual_IPC,
          Nivel_IMAE,
          Nivel_IPPM, 
@@ -26,30 +65,300 @@ data <- read.csv('../data/DATA_FINAL.csv', sep = ';') %>%
          Var_Mensual_IPPS,
          IPC_US, 
          Var_Mensual_US) %>% 
-  mutate(Var_Mensual_IMAE = Nivel_IMAE/lag(Nivel_IMAE)-1,
-         Periodo = dmy(Periodo),
-         Q = (PromedioVenta*IPC_US)/Nivel_IPC,
+  mutate(Periodo = dmy(Periodo))
+
+#cambio de base todos los indices a enero del 2004. 
+indices <- c("Nivel_IPC", "Nivel_IMAE", "Nivel_IPPM", "Nivel_IPPS", "IPC_US")
+index_at_base <- data %>% filter(Periodo == dmy('01-01-2000')) %>% 
+  select(all_of(indices)) %>% as.list() %>% set_names(indices)
+
+data <- data %>% 
+  mutate(across( all_of(indices), ~ . / index_at_base[[cur_column()]] )) %>% 
+  mutate(Var_Mensual_IMAE = Nivel_IMAE/lag(Nivel_IMAE)-1, 
+         tipo_cambio_real = PromedioVenta*IPC_US/Nivel_IPC) %>% 
+  rename(Inflacion_US = Var_Mensual_US,
+         Inflacion = Var_Mensual_IPC,
+         IPC = Nivel_IPC,
+         IMAE = Nivel_IMAE,
+         IPPM = Nivel_IPPM, 
+         IPPS = Nivel_IPPS,
+         tipo_cambio = PromedioVenta,
+         Tasa_US = Promedio_Tasa_Fed,
+         d1_IPPM = Var_Mensual_IPPM,
+         d1_IPPS = Var_Mensual_IPPS,
+         d1_IMAE = Var_Mensual_IMAE
          ) %>% 
-  select(Periodo, 
-         Q,
-         Promedio_Tasa_Fed,
-         TBP,
-         Var_Mensual_IMAE, 
-         Var_Mensual_IPC,
-         Var_Mensual_IPPM,
-         Var_Mensual_IPPS,
-         Var_Mensual_US
-         ) %>% 
-  rename(inf_us = Var_Mensual_US, 
-         inf = Var_Mensual_IPC) 
-data
+  mutate(TBP = TBP/100, Tasa_US = Tasa_US/100) 
 ```
 
 
 ```{r}
-read.csv('../data/DATA_FINAL.csv', sep = ';') %>% 
-  select(Periodo, Nivel_IPC, IPC_US) %>% 
-  filter(IPC_US==100)
+data_cfnai <- read_csv('../data/CFNAI.csv') %>% rename(Periodo = DATE) %>% 
+  mutate(CFNAI=CFNAI/100) %>% 
+  mutate(CFNAI = ifelse(CFNAI == 0, 0.01, CFNAI)) %>% 
+  mutate(d1_CFNAI = CFNAI/lag(CFNAI)-1) 
+
+month_mapping <- c(
+  "Enero" = "01", "Febrero" = "02", "Marzo" = "03", "Abril" = "04",
+  "Mayo" = "05", "Junio" = "06", "Julio" = "07", "Agosto" = "08",
+  "Septiembre" = "09", "Octubre" = "10", "Noviembre" = "11", "Diciembre" = "12"
+)
+
+data_exp_tc <- read_excel('../data/expectativas tipo de cambio.xlsx', range='A5:B220') %>% 
+  rename(Periodo = ...1, Expect_d1_tc = `A 6 meses`) %>% 
+  mutate(
+    month = str_extract(Periodo, "^[^/]+"),       
+    year = str_extract(Periodo, "\\d{4}$"),   
+    month_num = month_mapping[month],
+    Periodo = ymd(str_c(year, "-", month_num, "-01"))
+  ) %>%
+  select(-month, -year, -month_num) %>% 
+  mutate(Expect_d1_tc = Expect_d1_tc/100)
+  
+
+data2 <- list(data, data_exp_tc, data_cfnai) %>% reduce(full_join) %>%
+  arrange(Periodo) %>% filter(year(Periodo)>2000) %>% 
+  mutate(dif_tasas = log(TBP)-log(Tasa_US))
+
 ```
+
+
+```{r}
+#data sin los indices, tipo nominab y con rezagos
+indices <- c("IPC", "IMAE", "IPPM", "IPPS", "IPC_US", 'CFNAI')
+data_no <- data2 %>% select(-any_of(indices)) %>% select(-tipo_cambio)
+data_no <- data_no %>% 
+  add_rezagos(data_no %>% select(-Periodo) %>% names(), 3) %>% 
+  filter(2004<=year(Periodo))
+```
+
+# AE
+
+## Funciones
+
+```{r get_histog_var}
+get_histog_var <- function(df, var){
+  
+  df <- df %>% select(!!sym(var)) %>% na.omit()
+  v_y <- df %>% pull(!!sym(var))
+  bw <- 2 * IQR(v_y) / length(v_y)^(1/3)
+  bw <- ifelse(bw==0, 30, bw)
+  n_barras <- ceiling((max(v_y)-min(v_y))/bw)
+  
+  max_barra <- 
+    map_dbl(1:(n_barras-1), ~min(v_y)+.x*bw) %>% 
+    map_dbl(~length(v_y[.x-bw<v_y&v_y<=.x])) %>% 
+    max()
+  max_density <- max(density(v_y)$y)
+  factor <- max_barra/max_density
+  histog <- 
+    ggplot(df, aes(x = !!sym(var)))+
+    geom_histogram(aes(y = ..count..), binwidth = bw,
+                   fill = "cornflowerblue", color = "black", position = "identity") + 
+    geom_density(aes(y = ..density.. * factor),
+                 color = "darkblue", fill = "cornflowerblue", alpha = 0.5) + 
+    labs(title = str_c("Distribución de ", var))+
+    xlab(var)+
+    theme_bw() +
+    theme(plot.title = element_text(face = "bold", size = 12),
+            text = element_text(family = "Times New Roman"),
+            axis.ticks = element_line(colour = "grey70", linewidth = 0.3),
+            panel.grid.major = element_line(colour = "grey70", linewidth = 0.3),
+            panel.grid.minor = element_line(colour = "grey70", linewidth = 0.2)) +
+    scale_y_continuous(name = "Conteo", sec.axis = sec_axis(~./factor, name = "Densidad"))
+  
+  histog
+}
+```
+
+```{r get_histog_all}
+get_histog_all <- function(df, integers=F, lags=F){
+  if(integers){
+    var_num <- df %>% select(where(is.numeric)) %>% names()
+  }else{
+    var_num <- df %>% select(where(~is.numeric(.) && !is.integer(.))) %>% names()
+  }
+  if(length(var_num)==0){
+    stop("No hay variables numericas")
+  }
+  if(!lags){
+    var_num <- var_num[!grepl("^L([1-9]|[1-4][0-9]|50)", var_num)]
+  }
+  l_his <- var_num %>% map(~get_histog_var(df, .x)) %>% set_names(var_num)
+  l_his
+}
+```
+
+## Histogramas 
+
+```{r}
+histogramas <- get_histog_all(data_no)
+histogramas
+```
+## Correlacioens
+
+```{r}
+plot_corrs <- haga_plot_corrs2(data_no, var_y = 'tipo_cambio_real', group_lags = T)
+plot_corrs
+```
+
+## Evolucion 
+
+```{r}
+plot_evol <- function(data, cov, response, date_col = "Periodo") {
+
+  #data <-  data %>% select(all_of())
+  ggplot(data, aes_string(x = date_col)) +
+    geom_line(aes_string(y = cov, color = "'cov'"), size = 1) +
+    geom_line(aes_string(y = response, color = "'Response'"), size = 1) +
+    scale_color_manual(
+      values = c("cov" = "darkblue", "Response" = "darkred"),
+      labels = c("cov" = cov, "Response" = response)
+    ) +
+    theme_bw() +
+    theme(
+      legend.position = "bottom",
+      legend.title = element_blank(),
+      legend.text = element_text(face = "bold", size = 9),
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+      axis.text.y = element_text(size = 9),
+      axis.title = element_text(size = 11, family = "Times New Roman"),
+      panel.grid.major = element_line(color = "gray", linetype = "solid"),
+      panel.grid.minor = element_blank(),
+      text = element_text(family = "Times New Roman")
+    ) +
+    labs(
+      x = "Date",
+      y = "Values",
+      title = paste("Evolucion de", cov, "y", response)
+    )
+}
+
+plot_all_evol <- function(data, response, date_col = "Periodo", rem_lags=T) {
+  
+  covars <- data %>% select(-all_of(c(response, date_col))) %>% names
+  
+  if (rem_lags) {
+    covars <- covars[!grepl("^L[0-9]+", covars)]
+  }
+
+  plots <- list()
+  
+  for (cov in covars) {
+    plots[[cov]] <- plot_evol(data, cov, response, date_col)
+  }
+  return(plots)
+}
+
+
+plot_all_evol(data_no %>% 
+                mutate(d1_tc_real = tipo_cambio_real/lag(tipo_cambio_real)-1) %>% 
+                select(-tipo_cambio_real),
+              'd1_tc_real')
+```
+
+# Modelo
+
+```{r}
+#avriables del modelo
+data_mod <- data_no %>% na.omit() %>% select(-matches("^L[0-9]+"))
+```
+
+## Estacionariedad
+
+```{r}
+pruebe_pp <- function(variable) {
+
+  pp_deriva <- ur.pp(variable, type = "Z-alpha", model = "constant")
+  p_deriva <- 1 - pnorm(abs(pp_deriva@teststat))
+  
+  
+  pp_tendencia <- ur.pp(variable, type = "Z-alpha", model = "trend")
+  p_tendencia <- 1 - pnorm(abs(pp_tendencia@teststat))
+  
+
+  data.frame(
+    Modelo = c("Deriva", "Tendencia"),
+    `P-val` = c(p_deriva, p_tendencia)
+  )
+}
+
+pruebe_pp_all <- function(data, date_col = "Periodo") {
+  
+  data_no_lags <- data %>% select(-matches("^L[0-9]+"), -all_of(date_col))
+  
+  results <- map_dfr(
+    .x = names(data_no_lags),
+    .f = ~ {
+      variable_name <- .x
+      variable_data <- data_no_lags[[variable_name]]
+      result <- pruebe_pp(variable_data)
+      result <- result %>% mutate(Variable = variable_name)  
+      return(result)
+    }
+  )
+  return(results)
+}
+
+
+preubas_estacionariedad <- pruebe_pp_all(data_mod)
+preubas_estacionariedad
+```
+
+## ARDL 
+
+```{r}
+library(ARDL)
+library(tseries)
+library(lmtest)
+
+mods_ardl <- auto_ardl(
+  tipo_cambio_real ~ dif_tasas+Expect_d1_tc |Inflacion+Inflacion_US+d1_CFNAI+
+                                                       d1_IMAE+d1_IPPM+d1_IPPS,
+  data_mod,
+  max_order=3)
+
+best_ardl <- mods_ardl$best_model
+
+jb_test <- tseries::jarque.bera.test(best_ardl$residuals)
+bp_test <- bptest(best_ardl)
+
+cointegration_test <- bounds_f_test(mods_ardl$best_model, case = 2)
+
+
+
+plot_lr(best_ardl, coint_eq(best_ardl, case =2))
+```
+
+
+## Diagnosticos
+
+```{r}
+diagnostique <- function(mod_arima, lags, alpha=0.05){
+  auto_LjungBox <- map_dbl(1:lags,~Box.test(mod_arima$residuals,
+                                         lag = .x,
+                                         type = "Ljung-Box")$p.value)
+  heter_white <- map_dbl(1:lags, ~white.test(ts(mod_arima$residuals,
+                                                frequency = 4),
+                                             lag = .x)$p.value)
+  jarque_bera <- jarque.bera.test(mod_arima$residuals) 
+  shapiro <- shapiro.test(mod_arima$residuals)
+  output <- data.frame(rezagos=1:lags,
+                   LjungBox=auto_LjungBox,
+                   autocorr=ifelse(auto_LjungBox>alpha, "NO HAY", "Si hay"),
+                   white=heter_white,
+                   heteros=ifelse(heter_white>alpha, "NO HAY", "Si hay"), 
+                   jarque=jarque_bera$p.value,
+                   shapiro=shapiro$p.value
+                   )
+  output
+}
+```
+
+
+```{r}
+diagnostique(best_ardl)
+```
+
 
 
