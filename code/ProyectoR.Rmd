@@ -562,6 +562,14 @@ colnames(tbp_diaria)[1] <- "Dia_Mes"
 
 ```
 
+```{r}
+tbp_largo <- tbp_diaria %>%
+  pivot_longer(
+    cols = -Dia_Mes,  
+    names_to = "Año",  
+    values_to = "TBP"  
+  )
+```
 
 
 ```{r}
@@ -576,20 +584,21 @@ tbp_largo <- tbp_largo %>%
   )
 
 
-```
+``` 
+
 ```{r}
 
 
 tbp_mensual <- tbp_largo %>%
   mutate(Mes = floor_date(Fecha, "month")) %>% 
   group_by(Mes) %>%                            
-  summarise(TBP = mean(TBP, na.rm = TRUE))# Calcular el promedio ensual
+  summarise(TBP = mean(TBP, na.rm = TRUE)) 
 
 ```
 
 ```{r}
 tbp_mensual <- tbp_mensual %>%
-  rename(Periodo = Mes )
+  rename(Periodo = Mes ) 
 ```
 
 Unir 
