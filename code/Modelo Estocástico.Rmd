@@ -1,0 +1,169 @@
+---
+title: "Modelo Estocástico"
+output: html_document
+author: 
+  - Daniel Aguilar Paniagua- C00117
+  - Ashley Arrieta Padilla - C00753
+  - Sofía Bocker Brenes - C11102
+  - Naydelin Hernández Vargas - C03795
+---
+
+```{r}
+# Descargar librerías necesarias
+library(ggplot2) # para crear gráficos
+library(readxl)
+```
+
+```{r}
+# Importar archivo Excel con el tipo de cambio real en la historia
+tcr <- read_excel("../data/TCR_LONG.xlsx")
+tcr <- transform(tcr, TCR = as.numeric(TCR))
+tcr <- head(tcr, -4)
+summary(tcr)
+```
+
+```{r}
+# Se renombra la columna TCR
+df <- tcr # Crear una copia del data frame
+colnames(df)[colnames(df) == "TCR"] <- "S" # Renombrar la columna "CPI" a "S"
+df
+```
+
+```{r}
+# Se calculan los retornos relativos
+df$`Retorno` <- 0.00  # Crear una nueva columna inicializada en 0.00
+
+df$Retorno <- c(df$S[-1] / df$S[-nrow(df)] - 1, 0)
+ 
+```
+
+```{r}
+# Se estima el parámetro mu como la media del retorno y sigma como la desviación estándar como valores iniciales
+mu = mean(df$Retorno)
+mu
+sigma = sd(df$Retorno)
+sigma
+```
+
+```{r}
+# Se crea una nueva columna para ΔS
+df$`S(t+1)-S(t)` <- 0.00  # Crear una nueva columna inicializada en 0.00
+
+df$`S(t+1)-S(t)` <- c(diff(df$S), 0)  # Calcula las diferencias y añade un 0 al final
+df
+```
+
+```{r}
+# Se crea una nueva columna para μS
+df$`muS(t)` <- 0.00  # Crear una nueva columna inicializada en 0.00
+
+df$`muS(t)` <- mu * df$S
+df
+```
+
+$$
+\Delta S = \mu S \Delta t + \sigma S \Delta z
+$$
+```{r}
+# Se crea un columna para ΔS - μS
+df$`S(t+1)-S(t)-muS(t)` <- 0.00  # Crear una nueva columna inicializada en 0.00
+
+df$`S(t+1)-S(t)-muS(t)` <- df$`S(t+1)-S(t)` - df$`muS(t)`
+df
+```
+
+```{r}
+# Se crea una columna para la función de verosimilitud
+mu_2 <- 0.00  # Media fija
+sigma_2 <- sigma * df$S  # Vector de sigmas
+x <- df$`S(t+1)-S(t)-muS(t)`  # Vector de valores x
+df$pdf <- dnorm(x, mean = mu_2, sd = sigma_2)  # Calcular densidad para cada fila
+df
+```
+
+```{r}
+# Se crea una columna para la función log-verosimilitud
+df$`ln(pdf)` <- 0.00  # Crear una nueva columna inicializada en 0.00
+
+df$`ln(pdf)` <- log(df$pdf)
+df
+```
+
+```{r}
+# Se suma la columna de log-verosimilitud
+sum(df$`ln(pdf)`)
+```
+
+```{r}
+mov_browniano <- function(c) {
+  
+  # Copiar y renombrar la columna
+  df <- tcr
+  colnames(df)[colnames(df) == "TCR"] <- "S"
+  
+  # Calcular las nuevas columnas vectorizadas
+  df$`S(t+1)-S(t)` <- c(diff(df$S), 0)  # Diferencias entre filas
+  df$`muS(t)` <- c[1] * df$S  # Producto con mu
+  df$`S(t+1)-S(t)-muS(t)` <- df$`S(t+1)-S(t)` - df$`muS(t)`  # Restar
+  
+  # Calcular pdf y log(pdf) 
+  mu_2 <- 0.00
+  sigma_2 <- c[2] * df$S  # calcular sigma
+  x <- df$`S(t+1)-S(t)-muS(t)`  # Vector x
+  
+  df$pdf <- dnorm(x, mean = mu_2, sd = sigma_2)  # Densidad normal
+  df$`ln(pdf)` <- log(df$pdf)  # Logaritmo de la densidad
+  
+  # Sumar log(pdf) ignorando valores NA
+  f1 <- sum(df$`ln(pdf)`, na.rm = TRUE)
+  
+  # Minimizar el valor de la función objetivo
+  val <- -f1
+  cat("[mu, sigma] = ", c, ", Valor de la Función Objetivo: ", val, "\n")
+  return(val)
+}
+
+# Optimización
+c_inicial <- c(mu, sigma)  # Valores iniciales
+resultado <- optim(c_inicial, mov_browniano)
+
+# Ver resultados
+resultado
+
+```
+
+```{r}
+# Por lo tanto, se tiene que
+mu <- resultado$par[1]
+mu
+sigma <- resultado$par[2]
+sigma
+# son los parámetros que maximizan la log-verosimilitud
+```
+```{r}
+# Parámetros
+n <- 365  # Número de días de simulación
+sim <- 50  # Número de simulaciones
+dt <- 1  # Incremento de tiempo (1 día)
+S0 <- tail(df$S, 1)  # Último valor observado del tipo de cambio
+
+# Simulación
+set.seed(123)  # Para reproducibilidad
+caminos <- matrix(NA, nrow = n, ncol = sim)
+caminos[1, ] <- S0  # Valor inicial
+
+for (i in 2:n) {
+  z <- rnorm(sim)  # Término de ruido
+  caminos[i, ] <- caminos[i - 1, ] * exp((mu - 0.5 * sigma^2) * dt + sigma * z * sqrt(dt))
+}
+
+# Visualización
+time <- 1:n
+matplot(time, caminos, type = "l", lty = 1, col = rainbow(sim), main = "Simulaciones de TCR en Costa Rica", xlab = "Días", ylab = "Tipo de Cambio Real")
+
+```
+
+```{r}
+matplot(tcr$Fecha, tcr$TCR, type = "l", lty = 1, col = rainbow(sim), main = "Trayectoria Real TCR", xlab = "Días", ylab = "Tipo de Cambio Real")
+```
+
