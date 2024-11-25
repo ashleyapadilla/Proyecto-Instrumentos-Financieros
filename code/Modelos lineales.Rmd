@@ -197,6 +197,123 @@ histogramas
 ```
 ## Correlacioens
 
+```{r haga_plot_corrs2}
+haga_plot_corrs2 <- function(data, var_y="ValorTotal",
+                            obs_use="pairwise.complete.obs",
+                            keep_integers=T, keep_ordered=T,
+                            group_lags=T, alpha=0.05){
+  if (keep_integers) {
+    if (keep_ordered) {
+      data_numeric <- data %>%
+        select(where(~is.numeric(.) | is.ordered(.))) %>% 
+        mutate(across(where(is.ordered), as.integer))
+    } else {
+      data_numeric <- data %>%
+        select(where(is.numeric))
+    }
+  } else {
+    if (keep_ordered) {
+      data_numeric <- data %>%
+        select(where(~(is.numeric(.) & !is.integer(.)) | is.ordered(.)))%>%
+        mutate(across(where(is.ordered), as.integer))
+    } else {
+      data_numeric <- data %>%
+        select(where(~is.numeric(.) & !is.integer(.)))
+    }
+  }
+  
+  if (!(var_y %in% names(data_numeric))) {
+    stop("var_y no es numerica o no esta en los datos")
+  }
+  
+  ordinales <- data %>% select(where(is.ordered)) %>% names
+  
+  get_corr_cov <- function(df, var_y, covar, obs_use) {
+    ordinal <- ifelse(covar %in% ordinales, T, F)
+    vector_y <- df %>% pull(!!sym(var_y))
+    vector_covar <- df %>% pull(!!sym(covar))
+    
+    cor_pearson <- 
+      ifelse(ordinal, NA, cor(vector_y, vector_covar, method = "pearson", use = obs_use))
+    cor_spearman <- cor(vector_y, vector_covar, method = "spearman", use = obs_use)
+    cor_kendall <- cor(vector_y, vector_covar, method = "kendall", use = obs_use)
+    
+    p_pearson <- 
+      ifelse(ordinal, NA, cor.test(vector_y, vector_covar, method = "pearson", use = obs_use)$p.value)
+    p_spearman <- cor.test(vector_y, vector_covar, method = "spearman", use = obs_use)$p.value
+    p_kendall <- cor.test(vector_y, vector_covar, method = "kendall", use = obs_use)$p.value
+    
+    df_cor_cov <- tibble(tipo = c("Pearson", "Spearman", "Kendall"),
+                         cf:=c(cor_pearson, cor_spearman, cor_kendall),
+                         p_val = c(p_pearson, p_spearman, p_kendall), 
+                         variable=covar)
+    return(df_cor_cov)
+  }
+  
+  
+  covs <- names(select(data_numeric, -!!sym(var_y))) #covariables
+  lista_corr_covs <- covs %>%
+    map(~get_corr_cov(data_numeric, var_y, .x, obs_use))
+  
+  df_corr <- lista_corr_covs %>%
+    reduce(bind_rows) %>% 
+    mutate(tipo = factor(tipo, levels = c("Pearson", "Kendall", "Spearman")),
+           significant = ifelse(p_val < alpha, "*", "х")) %>% 
+    mutate(significant=ifelse(is.na(significant), "-", significant))
+
+  
+  if (group_lags) {
+  covs <- df_corr$variable %>% unique
+  
+  # Add lags of var_y explicitly
+  response_lags <- covs[grepl(paste0("^L[1-9]+", var_y, "$"), covs)]  # Identify lags of var_y
+  
+  # Separate covariates without lags
+  covs_sin_lag <- covs[!grepl("^L[1-9]", covs) & covs != var_y] %>% sort
+  
+  covs_lags <- covs %>% setdiff(c(covs_sin_lag, var_y))
+  
+  sorted <- c()
+  #SI HAY COVARIABELS SQUE NO TN VALRO CONTEMPARANEO VA A FALLLAR!!!!!!!!!
+  for (base_var in covs_sin_lag) {
+    lags_for_var <- covs_lags[str_detect(covs_lags, paste0("^L[1-9]+", base_var, "$"))] %>% sort
+    sorted <- c(sorted, base_var, lags_for_var)
+  }
+  sorted <- c(sorted, response_lags)
+  df_corr <- df_corr %>%
+    mutate(variable = factor(variable, ordered = TRUE, levels = unique(sorted)))
+}
+  
+  #print(df_corr)
+  plot_corr <- df_corr %>% 
+  ggplot(aes(x = variable, y = cf, fill = tipo)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = significant, group = interaction(variable, tipo)),
+            position = position_dodge(width = 0.9), vjust = -0.5, size = 3) +  # Add significance labels
+  theme_bw() +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold", size = 9),  
+    legend.text = element_text(face = "bold", size = 9),                   
+    text = element_text(family = "Times New Roman"),
+    axis.text.x = element_text(angle = 90, hjust = 0.5, size=9),  # Center the x-axis text
+    panel.grid.major.x = element_line(color = "gray", linetype = "solid"),
+    panel.grid.major.y = element_line(color = "gray", linetype = "solid"),
+    panel.grid.minor = element_blank(),
+    plot.caption = element_text(hjust = 0, size=15)
+  ) +
+  scale_fill_manual(values = c("Pearson" = "darkblue", "Kendall" = "cornflowerblue", "Spearman" = "lightblue")) +
+  scale_y_continuous(labels = scales::percent) +
+  scale_x_discrete(expand = expansion(add = c(0.5, 0.5))) +  # Add space around x-axis labels
+  labs(fill = NULL, caption = "*: significancia al 5%.    x: no significativo.     -: coeficiente no aplica") +
+  xlab("") +
+  ylab("Correlación")
+  
+  return(plot_corr)
+  
+  }
+```
+
 ```{r}
 plot_corrs <- haga_plot_corrs2(data_no, var_y = 'tipo_cambio_real', group_lags = T)
 plot_corrs
@@ -204,7 +321,7 @@ plot_corrs
 
 ## Evolucion 
 
-```{r}
+```{r plot_evol}
 plot_evol <- function(data, cov, response, date_col = "Periodo") {
 
   #data <-  data %>% select(all_of())
@@ -319,46 +436,47 @@ mods_ardl <- auto_ardl(
   max_order=3)
 
 best_ardl <- mods_ardl$best_model
+cointegration_test <- bounds_f_test(mods_ardl$best_model, case = 3)
 
-jb_test <- tseries::jarque.bera.test(best_ardl$residuals)
-bp_test <- bptest(best_ardl)
+multipliers(best_ardl)
 
-cointegration_test <- bounds_f_test(mods_ardl$best_model, case = 2)
+mods_ardl$best_model$coefficients
+```
 
 
-
-plot_lr(best_ardl, coint_eq(best_ardl, case =2))
+```{r}
+library(xtable)
+summary(best_ardl) %>% xtable()
 ```
 
 
 ## Diagnosticos
 
 ```{r}
-diagnostique <- function(mod_arima, lags, alpha=0.05){
-  auto_LjungBox <- map_dbl(1:lags,~Box.test(mod_arima$residuals,
-                                         lag = .x,
-                                         type = "Ljung-Box")$p.value)
-  heter_white <- map_dbl(1:lags, ~white.test(ts(mod_arima$residuals,
-                                                frequency = 4),
-                                             lag = .x)$p.value)
-  jarque_bera <- jarque.bera.test(mod_arima$residuals) 
-  shapiro <- shapiro.test(mod_arima$residuals)
-  output <- data.frame(rezagos=1:lags,
-                   LjungBox=auto_LjungBox,
-                   autocorr=ifelse(auto_LjungBox>alpha, "NO HAY", "Si hay"),
-                   white=heter_white,
-                   heteros=ifelse(heter_white>alpha, "NO HAY", "Si hay"), 
-                   jarque=jarque_bera$p.value,
-                   shapiro=shapiro$p.value
-                   )
-  output
-}
+jb_test <- tseries::jarque.bera.test(best_ardl$residuals)
+bp_test <- bptest(best_ardl)
+Box.test(best_ardl$residuals)
+acf(best_ardl$residuals)
 ```
 
+
+## Performance
 
 ```{r}
-diagnostique(best_ardl)
+rmse <- sqrt(mean(mods_ardl$best_model$residuals^2))
+mae <- mean(abs(mods_ardl$best_model$residuals))
+
+df_modelo <- data_mod %>% mutate(tc_real_modelo = c(NA, NA, NA, best_ardl$fitted.values))
+
+plot_mod <- plot_evol(df_modelo, cov = 'tc_real_modelo', response = 'tipo_cambio_real')
+
+plot_mod <- plot_mod+labs(title= '')+ylab('')
+                   
+ggsave('plot_mod.png', plot_mod, width = 9)            
 ```
+
+
+
 
 
 
