@@ -167,3 +167,14 @@ matplot(time, caminos, type = "l", lty = 1, col = rainbow(sim), main = "Simulaci
 matplot(tcr$Fecha, tcr$TCR, type = "l", lty = 1, col = rainbow(sim), main = "Trayectoria Real TCR", xlab = "Días", ylab = "Tipo de Cambio Real")
 ```
 
+```{r}
+promedio <- rowMeans(caminos)  # Promedio de las simulaciones
+promedio_sim <- mean(promedio)
+promedio_sim
+promedio_real <- mean(tcr$TCR) # Promedio TCR histórico
+promedio_real
+rmse <- sqrt(mean((promedio_real - promedio_sim)^2)) # Desviación cuadrática media
+rmse
+mae <- mean(abs(promedio_real - promedio_sim)) # Error absoluto medio
+mae
+```
