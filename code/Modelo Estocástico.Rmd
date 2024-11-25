@@ -140,11 +140,17 @@ sigma <- resultado$par[2]
 sigma
 # son los parámetros que maximizan la log-verosimilitud
 ```
+
 ```{r}
-# Parámetros
-n <- 365  # Número de días de simulación
+# Conversión de parámetros mensuales a diarios
+dias_por_mes <- 30.44  # Promedio de días por mes
+mu_diario <- mu / dias_por_mes
+sigma_diario <- sigma / sqrt(dias_por_mes)
+
+# Parámetros de simulación
+n <- 365  # Número de días a simular
 sim <- 50  # Número de simulaciones
-dt <- 1  # Incremento de tiempo (1 día)
+dt <- 1  # Incremento de tiempo (en días)
 S0 <- tail(df$S, 1)  # Último valor observado del tipo de cambio
 
 # Simulación
@@ -153,14 +159,14 @@ caminos <- matrix(NA, nrow = n, ncol = sim)
 caminos[1, ] <- S0  # Valor inicial
 
 for (i in 2:n) {
-  z <- rnorm(sim)  # Término de ruido
-  caminos[i, ] <- caminos[i - 1, ] * exp((mu - 0.5 * sigma^2) * dt + sigma * z * sqrt(dt))
+  z <- rnorm(sim)  # Ruido aleatorio
+  caminos[i, ] <- caminos[i - 1, ] * exp((mu_diario - 0.5 * sigma_diario^2) * dt + sigma_diario * z * sqrt(dt))
 }
 
 # Visualización
 time <- 1:n
-matplot(time, caminos, type = "l", lty = 1, col = rainbow(sim), main = "Simulaciones de TCR en Costa Rica", xlab = "Días", ylab = "Tipo de Cambio Real")
-
+matplot(time, caminos, type = "l", lty = 1, col = rainbow(sim), 
+        main = "Simulaciones de TCR en Costa Rica", xlab = "Días", ylab = "Tipo de Cambio Real")
 ```
 
 ```{r}
@@ -168,13 +174,33 @@ matplot(tcr$Fecha, tcr$TCR, type = "l", lty = 1, col = rainbow(sim), main = "Tra
 ```
 
 ```{r}
-promedio <- rowMeans(caminos)  # Promedio de las simulaciones
-promedio_sim <- mean(promedio)
-promedio_sim
-promedio_real <- mean(tcr$TCR) # Promedio TCR histórico
-promedio_real
-rmse <- sqrt(mean((promedio_real - promedio_sim)^2)) # Desviación cuadrática media
+# Parámetros
+n <- 188  # Número de meses de simulación (01/01/2009-01/08/2024)
+sim <- 50 # Número de simulaciones
+dt <- 1   # Incremento de tiempo (1 mes)
+S0 <- df$S[133]  # Valor observado del tipo de cambio en 2009
+
+# Simulación
+set.seed(123)  # Para reproducibilidad
+caminos_muestra <- matrix(NA, nrow = n, ncol = sim)
+caminos_muestra[1, ] <- S0  # Valor inicial
+
+for (i in 2:n) {
+  set.seed(i)
+  z <- rnorm(sim)  # Término de ruido
+  caminos_muestra[i, ] <- caminos_muestra[i - 1, ] * exp((mu - 0.5 * (sigma)^2) * dt + sigma * z * sqrt(dt))
+}
+
+matplot(df[133:320, 1], caminos_muestra, type = "l", lty = 1, col = rainbow(sim), main = "Trayectoria Simulada TCR", xlab = "Días", ylab = "Tipo de Cambio Real")
+```
+
+```{r}
+promedio_muestra <- rowMeans(caminos_muestra)  # Promedio de las simulaciones
+vector_errores <- (promedio_muestra - df[133:320, 2])
+rmse <- sqrt(mean(vector_errores^2))
 rmse
-mae <- mean(abs(promedio_real - promedio_sim)) # Error absoluto medio
+mae <- mean(abs(vector_errores))
 mae
 ```
+
+
